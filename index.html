@@ -5,16 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YIL Water Management Dashboard</title>
     
+    <!-- Inline SVG Water Drop Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'%3E%3Cpath d='M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z'/%3E%3C/svg%3E">
     
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- SUPABASE GLOBAL CDN CLIENT MODULE LIBRARY -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-50 font-sans text-gray-800">
 
+    <!-- LOGIN PAGE -->
     <div id="loginPage" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-50 p-4 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
         <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-blue-500/10">
             <div class="text-center mb-6">
+                <!-- Water Drop Logo -->
                 <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-blue-600 mb-3">
                     <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
@@ -40,6 +48,7 @@
                     <input type="password" id="password" required class="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition" placeholder="••••••••">
                 </div>
 
+                <!-- EXTRA WORKER NAME FIELD -->
                 <div id="workerNameField" class="hidden border-t border-slate-100 pt-4 mt-2">
                     <label class="block text-sm font-semibold text-amber-700 mb-1 flex items-center gap-1.5">
                         <i class="fa-solid fa-id-card text-xs"></i> Identification: What is your Name?
@@ -54,10 +63,13 @@
         </div>
     </div>
 
+    <!-- MAIN DASHBOARD INTERFACE -->
     <div id="appInterface" class="hidden min-h-screen flex flex-col md:flex-row">
         
+        <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-slate-900 text-white p-4 flex flex-col justify-between shadow-xl">
             <div>
+                <!-- Sidebar Water Drop Logo Brand Block -->
                 <div class="p-4 border-b border-slate-800 mb-4 flex items-center gap-3">
                     <div class="text-blue-500 shrink-0">
                         <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -83,15 +95,18 @@
             </div>
             
             <div class="p-4 border-t border-slate-800 space-y-2">
+                <!-- Admin Clear Data Button -->
                 <button id="adminClearBtn" onclick="clearAllData()" class="hidden w-full flex items-center gap-2 px-4 py-2 rounded-xl bg-red-950/40 text-red-400 text-xs font-semibold hover:bg-red-900 hover:text-white transition border border-red-900/30">
                     <i class="fa-solid fa-triangle-exclamation"></i> Clear All Data
                 </button>
+                <!-- Log Out Button -->
                 <button onclick="logOut()" class="w-full flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm hover:bg-red-600 hover:text-white transition font-semibold">
                     <i class="fa-solid fa-power-off"></i> Log Out Session
                 </button>
             </div>
         </aside>
 
+        <!-- MAIN CONTENT VIEW -->
         <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
             <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div>
@@ -113,15 +128,19 @@
                 </div>
             </header>
 
+            <!-- ADMIN SYSTEM PRIVILEGES HUB PANEL VIEW GRID -->
             <div id="adminControlsArea" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- ACCESS LOGS SECTION -->
                 <section class="lg:col-span-1 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <h4 class="text-xs font-bold uppercase text-slate-500 tracking-wider mb-2.5 flex items-center gap-1.5">
                         <i class="fa-solid fa-clock-rotate-left text-slate-400"></i> Authorization Access Logs
                     </h4>
                     <div id="loginLogsContainer" class="flex flex-col gap-1.5 text-[11px] font-medium text-slate-700 max-h-24 overflow-y-auto p-1">
-                        </div>
+                        <!-- Login stamps -->
+                    </div>
                 </section>
 
+                <!-- PRICE CONTROL PANEL -->
                 <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                         <h4 class="text-xs font-bold uppercase text-slate-500 tracking-wider mb-2 flex items-center gap-1.5">
@@ -139,6 +158,7 @@
                     </div>
                 </section>
 
+                <!-- DYNAMIC PASSWORD MODIFIER UTILITY CONTROL -->
                 <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                         <h4 class="text-xs font-bold uppercase text-slate-500 tracking-wider mb-2 flex items-center gap-1.5">
@@ -161,6 +181,7 @@
                 </section>
             </div>
 
+            <!-- STATS CARDS -->
             <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between">
                     <div>
@@ -205,7 +226,9 @@
                 </div>
             </section>
 
+            <!-- WAREHOUSE STOCK & DEBT CARDS -->
             <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- Debt Status -->
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
                     <h3 class="font-black text-slate-900 mb-3 border-b border-slate-100 pb-2 flex items-center gap-1.5">
                         <i class="fa-solid fa-user-xmark text-red-500"></i> Outstanding Credit Arrears
@@ -226,6 +249,7 @@
                     </div>
                 </div>
 
+                <!-- Stock Counter -->
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
                     <h3 class="font-black text-slate-900 mb-2 border-b border-slate-100 pb-2 flex items-center gap-1.5">
                         <i class="fa-solid fa-boxes-stacked text-blue-500"></i> Vault Inventory Audit
@@ -258,6 +282,7 @@
                     </div>
                 </div>
 
+                <!-- Payment Methods breakdown -->
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
                     <h3 class="font-black text-slate-900 mb-3 border-b border-slate-100 pb-2 flex items-center gap-1.5">
                         <i class="fa-solid fa-scale-balanced text-emerald-500"></i> Cash Flow Auditing Channel Split
@@ -279,6 +304,7 @@
                 </div>
             </section>
 
+            <!-- DATA TABLES -->
             <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="p-4 border-b border-slate-200 bg-slate-50/70 flex items-center gap-2">
                     <i class="fa-solid fa-list-check text-slate-500"></i>
@@ -304,13 +330,15 @@
         </main>
     </div>
 
+    <!-- MAIN APP FOOTER -->
     <footer class="w-full text-center py-4 bg-slate-900 text-slate-500 text-xs border-t border-slate-800">
         &copy; 2026 YIL Table Water Operations Portal. Core Architecture engineered by 
-        <a href="https://adamdevv.vercel.app" target="_blank" class="text-blue-500 font-bold underline transition ml-0.5">
+        <a href="https://adam-devv.vercel.app" target="_blank" class="text-blue-500 font-bold underline transition ml-0.5">
             Adam Saidu
         </a>
     </footer>
 
+    <!-- ADD SALES MODAL -->
     <div id="salesModal" class="fixed inset-0 bg-slate-950/60 hidden flex items-center justify-center p-4 z-40 backdrop-blur-xs">
         <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
             <div class="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
@@ -370,6 +398,7 @@
         </div>
     </div>
 
+    <!-- ADD EXPENSE MODAL -->
     <div id="expenseModal" class="fixed inset-0 bg-slate-950/60 hidden flex items-center justify-center p-4 z-40 backdrop-blur-xs">
         <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
             <div class="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
