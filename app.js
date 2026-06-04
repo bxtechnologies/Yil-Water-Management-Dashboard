@@ -1,4 +1,10 @@
-// --- DATABASE STATE ---
+// --- DATABASE INITIALIZATION ENGINE ---
+const SUPABASE_URL = 'https://fdeelqxwzwfkdffoavqd.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkZWVscXh3endma2RmZm9hdnFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1Njk4MDQsImV4cCI6MjA5NjE0NTgwNH0.4vehNDtTDrdWz8WrsgF22t17GP5f26rjBkataGiEAnU';
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// --- APP LOCAL INSTANCE RUNNING STATE ---
 let state = {
     currentUser: "",       
     currentRole: "",       
@@ -8,54 +14,114 @@ let state = {
     inventory: { production: 2000, damaged: 0 },
     activeLogins: [],
     bagUnitPrice: 350,      
-    adminPassword: "3193",  // Baseline default admin password parameter
-    workerPassword: "5566"  // Baseline default worker password parameter
+    adminPassword: "3193",  
+    workerPassword: "5566"  
 };
 
-// --- INITIALIZATION ---
-window.addEventListener('DOMContentLoaded', () => {
-    const localSaved = localStorage.getItem('yil_water_simple_state');
-    if (localSaved) {
-        state = JSON.parse(localSaved);
-        // Fallback safety migrations for database continuity upgrades
-        if (state.bagUnitPrice === undefined) state.bagUnitPrice = 350;
-        if (!state.adminPassword) state.adminPassword = "3193";
-        if (!state.workerPassword) state.workerPassword = "5566";
-    }
-    
-    // Default current dates setups
+// --- RUN SYSTEM CORE ON STARTUP ---
+window.addEventListener('DOMContentLoaded', async () => {
+    // 1. Initial configuration dates values mapping setup
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('invDate').value = today;
     document.getElementById('dateFilter').value = today;
     document.getElementById('currentDateDisplay').innerHTML = `<i class="fa-solid fa-calendar-day"></i> ${new Date().toDateString()}`;
 
-    // Load internal system parameters variables configuration directly inside fields templates
-    document.getElementById('masterBagPriceInput').value = state.bagUnitPrice;
-    document.getElementById('adminPassInput').value = state.adminPassword;
-    document.getElementById('workerPassInput').value = state.workerPassword;
-
-    // Event hooks
+    // 2. Attach frontend form interface action events triggers hooks
     document.getElementById('authForm').addEventListener('submit', logInUser);
     document.getElementById('salesForm').addEventListener('submit', saveNewSale);
     document.getElementById('expenseForm').addEventListener('submit', saveNewExpense);
     document.getElementById('dateFilter').addEventListener('change', renderDashboard);
     document.getElementById('username').addEventListener('input', checkUsernameInput);
 
-    // Auto-login session re-check
+    // 3. Download the baseline values live from the cloud tables data buckets
+    await downloadCloudState();
+
+    // 4. Auto-login active session memory state re-sync check
     const rememberedRole = localStorage.getItem('remembered_role');
     const rememberedName = localStorage.getItem('remembered_name');
     if (rememberedRole) {
         setupUserSession(rememberedRole, rememberedName || "");
     }
 
+    // 5. Connect live subscription listeners pipeline channels
+    initializeRealtimeSync();
+    
     renderDashboard();
 });
 
-function saveToLocalStorage() {
-    localStorage.setItem('yil_water_simple_state', JSON.stringify(state));
+// --- CLOUD SYNCHRONIZATION DATA FETCH PIPELINES ---
+async function downloadCloudState() {
+    try {
+        // Fetch Settings Configuration parameters Row
+        const { data: settingsData } = await supabase.from('portal_settings').select('*').eq('id', 1).single();
+        if (settingsData) {
+            state.bagUnitPrice = settingsData.bag_price;
+            state.adminPassword = settingsData.admin_password;
+            state.workerPassword = settingsData.worker_password;
+            
+            document.getElementById('masterBagPriceInput').value = state.bagUnitPrice;
+            document.getElementById('adminPassInput').value = state.adminPassword;
+            document.getElementById('workerPassInput').value = state.workerPassword;
+        }
+
+        // Fetch Inventory metrics values row
+        const { data: invData } = await supabase.from('inventory').select('*').eq('id', 1).single();
+        if (invData) {
+            state.inventory.production = invData.production;
+            state.inventory.damaged = invData.damaged;
+        }
+
+        // Fetch All Sales records from the table matrix
+        const { data: salesList } = await supabase.from('sales').select('*').order('id', { ascending: false });
+        if (salesList) {
+            state.sales = salesList.map(s => ({
+                invoiceNumber: s.invoice_number,
+                date: s.date,
+                customerName: s.customer_name,
+                quantity: s.quantity,
+                unitPrice: s.unit_price,
+                totalAmount: s.total_amount,
+                paymentMethod: s.payment_method,
+                officer: s.officer,
+                recordedBy: s.recorded_by
+            }));
+        }
+
+        // Fetch All Operating Expense Logs from table matrix
+        const { data: expensesList } = await supabase.from('expenses').select('*').order('id', { ascending: false });
+        if (expensesList) {
+            state.expenses = expensesList.map(e => ({
+                category: e.category,
+                amount: e.amount,
+                desc: e.desc,
+                date: e.date,
+                recordedBy: e.recorded_by
+            }));
+        }
+
+        // Fetch Activity Logging Audits from table matrix
+        const { data: logsList } = await supabase.from('access_logs').select('*').order('id', { ascending: false }).limit(25);
+        if (logsList) {
+            state.activeLogins = logsList;
+        }
+
+    } catch (err) {
+        console.error("Cloud framework sync error on initial boot up downloads: ", err);
+    }
 }
 
-// Check username typing to reveal the "What is your Name?" field
+// --- CORE INTERFACE REALTIME SUBSCRIPTIONS PIPELINE (THE SYNC MAGIC) ---
+function initializeRealtimeSync() {
+    supabase.channel('cloud-crud-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'portal_settings' }, async () => { await downloadCloudState(); renderDashboard(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, async () => { await downloadCloudState(); renderDashboard(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, async () => { await downloadCloudState(); renderDashboard(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, async () => { await downloadCloudState(); renderDashboard(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'access_logs' }, async () => { await downloadCloudState(); renderDashboard(); })
+        .subscribe();
+}
+
+// Reveal secondary input name label properties on username character evaluation keys
 function checkUsernameInput(e) {
     const inputVal = e.target.value.toLowerCase().trim();
     const nameField = document.getElementById('workerNameField');
@@ -70,8 +136,8 @@ function checkUsernameInput(e) {
     }
 }
 
-// --- LOG IN FUNCTION WITH DYNAMIC CREDENTIALS MATCHING ---
-function logInUser(e) {
+// --- LOG IN ROUTINES INTEGRATED WITH CLOUD VAL SYSTEM STATE ---
+async function logInUser(e) {
     e.preventDefault();
     const userTyped = document.getElementById('username').value.toLowerCase().trim();
     const passTyped = document.getElementById('password').value.trim();
@@ -82,7 +148,9 @@ function logInUser(e) {
         return;
     }
 
-    // Dynamic state matching validation check
+    // Double check cloud state matches values on user intent challenge verification
+    await downloadCloudState();
+
     if (userTyped === 'admin' && passTyped !== state.adminPassword) {
         alert("Invalid Admin Authentication Pin Key.");
         return;
@@ -102,11 +170,12 @@ function logInUser(e) {
     const currentTimeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const sessionLabel = userTyped === 'admin' ? 'Admin Master' : `Worker: ${nameTyped}`;
     
-    state.activeLogins.unshift({
+    // Save login event directly up to cloud activity framework matrix
+    await supabase.from('access_logs').insert([{
         user: sessionLabel,
         time: currentTimeString,
         date: new Date().toLocaleDateString()
-    });
+    }]);
 
     localStorage.setItem('remembered_role', userTyped);
     localStorage.setItem('remembered_name', nameTyped);
@@ -124,11 +193,11 @@ function setupUserSession(role, name) {
         state.currentUser = "Admin";
         document.getElementById('adminClearBtn').classList.remove('hidden');
         document.getElementById('invDate').removeAttribute('readonly');
-        controlsArea.classList.remove('hidden'); // Open Admin controls layout wrapper view blocks
+        controlsArea.classList.remove('hidden'); 
     } else {
         state.currentUser = "Worker: " + name;
         document.getElementById('adminClearBtn').classList.add('hidden');
-        controlsArea.classList.add('hidden');    // Protect and secure structural layout control panels block
+        controlsArea.classList.add('hidden');    
         
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('invDate').value = today;
@@ -139,40 +208,39 @@ function setupUserSession(role, name) {
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('appInterface').classList.remove('hidden');
 
-    saveToLocalStorage();
     renderDashboard();
 }
 
-// --- MASTER PRICE MANAGEMENT UPDATE ACTION ---
-function updateSystemPrice() {
+// --- LIVE ADMIN MASTER PRICE EDITING ACTION ---
+async function updateSystemPrice() {
+    if (state.currentRole !== 'admin') return;
     const newPrice = parseFloat(document.getElementById('masterBagPriceInput').value);
     if (!newPrice || newPrice <= 0) {
         alert("Please enter a valid price amount greater than 0.");
         return;
     }
     
-    state.bagUnitPrice = newPrice;
-    saveToLocalStorage();
-    alert(`Success! Standard bag price configuration has been updated to ₦${newPrice.toLocaleString()}`);
-    renderDashboard();
+    await supabase.from('portal_settings').update({ bag_price: newPrice }).eq('id', 1);
+    alert(`Success! Standard bag price configuration updated to ₦${newPrice.toLocaleString()}`);
 }
 
-// --- MASTER PASSWORDS ACCOUNT SECURITY MANAGEMENT UTILITY ---
-function updateSystemPasswords() {
+// --- DYNAMIC PASSWORD MODIFIER ACTIONS ---
+async function updateSystemPasswords() {
+    if (state.currentRole !== 'admin') return;
     const newAdminPass = document.getElementById('adminPassInput').value.trim();
     const newWorkerPass = document.getElementById('workerPassInput').value.trim();
 
     if (!newAdminPass || !newWorkerPass) {
-        alert("Security Error: Authentication access keys cannot be saved as empty space templates.");
+        alert("Security Error: Authentication access keys cannot be empty.");
         return;
     }
 
-    state.adminPassword = newAdminPass;
-    state.workerPassword = newWorkerPass;
-    saveToLocalStorage();
+    await supabase.from('portal_settings').update({ 
+        admin_password: newAdminPass, 
+        worker_password: newWorkerPass 
+    }).eq('id', 1);
     
-    alert("System Security Access Matrix successfully updated!\nNew passwords are live immediately.");
-    renderDashboard();
+    alert("System Security Access Matrix successfully updated across all cloud instances!");
 }
 
 function logOut() {
@@ -183,8 +251,6 @@ function logOut() {
     localStorage.removeItem('remembered_role');
     localStorage.removeItem('remembered_name');
 
-    saveToLocalStorage();
-
     document.getElementById('authForm').reset();
     document.getElementById('workerNameField').classList.add('hidden');
 
@@ -192,88 +258,79 @@ function logOut() {
     document.getElementById('appInterface').classList.add('hidden');
 }
 
-function clearAllData() {
-    if (confirm("Are you sure you want to completely erase all data records from this local computer system?")) {
-        state.sales = [];
-        state.expenses = [];
-        state.inventory = { production: 0, damaged: 0 };
-        state.activeLogins = [];
-        state.bagUnitPrice = 350; 
-        state.adminPassword = "3193";
-        state.workerPassword = "5566";
+async function clearAllData() {
+    if (state.currentRole !== 'admin') return;
+    if (confirm("CRITICAL WARNING: Are you sure you want to completely erase all data row records across all cloud server tables? This action cannot be reversed!")) {
+        await supabase.from('sales').delete().neq('id', 0);
+        await supabase.from('expenses').delete().neq('id', 0);
+        await supabase.from('access_logs').delete().neq('id', 0);
+        await supabase.from('inventory').update({ production: 2000, damaged: 0 }).eq('id', 1);
+        await supabase.from('portal_settings').update({ bag_price: 350, admin_password: "3193", worker_password: "5566" }).eq('id', 1);
         
-        document.getElementById('masterBagPriceInput').value = 350;
-        document.getElementById('adminPassInput').value = "3193";
-        document.getElementById('workerPassInput').value = "5566";
-        
-        saveToLocalStorage();
+        alert("Cloud storage servers successfully reset to factory parameters!");
+        await downloadCloudState();
         renderDashboard();
     }
 }
 
-function changeStock(field, val) {
-    if (field === 'production') {
-        state.inventory.production = Math.max(0, state.inventory.production + val);
-    } else if (field === 'damaged') {
-        state.inventory.damaged = Math.max(0, state.inventory.damaged + val);
-    }
-    saveToLocalStorage();
-    renderDashboard();
+async function changeStock(field, val) {
+    let currentProd = state.inventory.production;
+    let currentDam = state.inventory.damaged;
+
+    if (field === 'production') currentProd = Math.max(0, currentProd + val);
+    if (field === 'damaged') currentDam = Math.max(0, currentDam + val);
+
+    await supabase.from('inventory').update({ production: currentProd, damaged: currentDam }).eq('id', 1);
 }
 
-// --- DATA SAVING ENGINE ACTIONS ---
-function saveNewSale(e) {
+// --- TRANSMIT TRANSACTION ENTRIES FORWARD TO CLOUD SERVERS ---
+async function saveNewSale(e) {
     e.preventDefault();
     const qty = parseInt(document.getElementById('invQty').value);
     const price = parseFloat(document.getElementById('invPrice').value); 
 
     const saleRecord = {
-        invoiceNumber: document.getElementById('invNo').value,
+        invoice_number: document.getElementById('invNo').value,
         date: document.getElementById('invDate').value,
-        customerName: document.getElementById('invCustomer').value,
+        customer_name: document.getElementById('invCustomer').value,
         quantity: qty,
-        unitPrice: price,
-        totalAmount: qty * price,
-        paymentMethod: document.getElementById('invPaymentMethod').value,
+        unit_price: price,
+        total_amount: qty * price,
+        payment_method: document.getElementById('invPaymentMethod').value,
         officer: document.getElementById('invOfficer').value,
-        recordedBy: state.currentUser 
+        recorded_by: state.currentUser 
     };
 
-    state.sales.unshift(saleRecord);
-    saveToLocalStorage();
+    await supabase.from('sales').insert([saleRecord]);
     closeModal('salesModal');
-    renderDashboard();
 
     document.getElementById('invCustomer').value = "";
     document.getElementById('invQty').value = "1";
 }
 
-function saveNewExpense(e) {
+async function saveNewExpense(e) {
     e.preventDefault();
     const expenseRecord = {
         category: document.getElementById('expCategory').value,
         amount: parseFloat(document.getElementById('expAmount').value),
         desc: document.getElementById('expDesc').value,
         date: new Date().toISOString().split('T')[0],
-        recordedBy: state.currentUser 
+        recorded_by: state.currentUser 
     };
 
-    state.expenses.unshift(expenseRecord);
-    saveToLocalStorage();
+    await supabase.from('expenses').insert([expenseRecord]);
     closeModal('expenseModal');
-    renderDashboard();
     e.target.reset();
 }
 
-function deleteSale(invoiceNo) {
-    if (confirm("Do you want to delete invoice: " + invoiceNo + "?")) {
-        state.sales = state.sales.filter(s => s.invoiceNumber !== invoiceNo);
-        saveToLocalStorage();
-        renderDashboard();
+async function deleteSale(invoiceNo) {
+    if (state.currentRole !== 'admin') return;
+    if (confirm("Do you want to permanently delete cloud ledger invoice row statement: " + invoiceNo + "?")) {
+        await supabase.from('sales').delete().eq('invoice_number', invoiceNo);
     }
 }
 
-// --- MATHEMATICAL AND GRAPHICAL RENDERING ---
+// --- MATHEMATICAL LEDGER RENDERING ENGINE ---
 function renderDashboard() {
     const selectedDate = document.getElementById('dateFilter').value;
     const filteredSales = state.sales.filter(s => s.date === selectedDate);
@@ -338,7 +395,7 @@ function renderDashboard() {
     if (state.currentRole === 'admin') {
         const logDisplayTarget = document.getElementById('loginLogsContainer');
         if (state.activeLogins.length === 0) {
-            logDisplayTarget.innerHTML = `<span class="text-slate-400 italic flex items-center gap-1"><i class="fa-solid fa-folder-open"></i> No previous logins archived yet.</span>`;
+            logDisplayTarget.innerHTML = `<span class="text-slate-400 italic flex items-center gap-1"><i class="fa-solid fa-folder-open"></i> No access logs recorded in cloud.</span>`;
         } else {
             logDisplayTarget.innerHTML = state.activeLogins.map(log => `
                 <div class="bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-xl inline-flex items-center justify-between font-semibold shadow-xs w-full">
@@ -355,7 +412,7 @@ function renderDashboard() {
 function renderTableRows(salesArray) {
     const tbody = document.getElementById('salesTableBody');
     if (salesArray.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 italic font-medium"><i class="fa-solid fa-inbox block text-xl mb-1 text-slate-300"></i> No business records logged for this selected calendar date view.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 italic font-medium"><i class="fa-solid fa-inbox block text-xl mb-1 text-slate-300"></i> No transactions logged on cloud for this selected calendar date view.</td></tr>`;
         return;
     }
 
@@ -385,7 +442,7 @@ function renderTableRows(salesArray) {
     `).join('');
 }
 
-// --- EXPORT SHEET COMPONENT ENGINE ---
+// --- EXPORT SHEET ARRAYS OUT ---
 function exportCSV() {
     const activeDate = document.getElementById('dateFilter').value || "Report";
     let rows = [];
@@ -423,7 +480,7 @@ function exportCSV() {
     document.body.removeChild(downloadAnchor);
 }
 
-// --- WINDOW MODALS INTERACTION ACTIONS ---
+// --- OPEN WINDOW SCREEN FRAME WORK MODALS ---
 function openModal(id) {
     if (id === 'salesModal') {
         document.getElementById('invNo').value = 'YIL-' + Math.floor(100000 + Math.random() * 900000);
