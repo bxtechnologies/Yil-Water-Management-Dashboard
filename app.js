@@ -1,127 +1,48 @@
-// --- DATABASE INITIALIZATION ENGINE ---
-const SUPABASE_URL = 'https://fdeelqxwzwfkdffoavqd.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkZWVscXh3endma2RmZm9hdnFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1Njk4MDQsImV4cCI6MjA5NjE0NTgwNH0.4vehNDtTDrdWz8WrsgF22t17GP5f26rjBkataGiEAnU';
-
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// --- APP LOCAL INSTANCE RUNNING STATE ---
+// --- LOCAL ENGINE RUNNING STATE CONTROL ---
 let state = {
     currentUser: "",       
     currentRole: "",       
     workerPersonalName: "", 
-    sales: [],
-    expenses: [],
-    inventory: { production: 2000, damaged: 0 },
-    activeLogins: [],
-    bagUnitPrice: 350,      
-    adminPassword: "3193",  
-    workerPassword: "5566"  
+    sales: JSON.parse(localStorage.getItem('yil_sales')) || [],
+    expenses: JSON.parse(localStorage.getItem('yil_expenses')) || [],
+    inventory: JSON.parse(localStorage.getItem('yil_inventory')) || { production: 2000, damaged: 0 },
+    activeLogins: JSON.parse(localStorage.getItem('yil_logins')) || [],
+    bagUnitPrice: parseFloat(localStorage.getItem('yil_bag_price')) || 350,      
+    adminPassword: localStorage.getItem('yil_admin_pass') || "3193",  
+    workerPassword: localStorage.getItem('yil_worker_pass') || "5566"  
 };
 
-// --- RUN SYSTEM CORE ON STARTUP ---
-window.addEventListener('DOMContentLoaded', async () => {
-    // 1. Initial configuration dates values mapping setup
+// --- CORE SYSTEM LOAD BOOT STRAPPER ---
+window.addEventListener('DOMContentLoaded', () => {
+    // 1. Base date inputs initialization mapping properties
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('invDate').value = today;
     document.getElementById('dateFilter').value = today;
     document.getElementById('currentDateDisplay').innerHTML = `<i class="fa-solid fa-calendar-day"></i> ${new Date().toDateString()}`;
 
-    // 2. Attach frontend form interface action events triggers hooks
+    // 2. Map system event listeners parameters hook triggers
     document.getElementById('authForm').addEventListener('submit', logInUser);
     document.getElementById('salesForm').addEventListener('submit', saveNewSale);
     document.getElementById('expenseForm').addEventListener('submit', saveNewExpense);
     document.getElementById('dateFilter').addEventListener('change', renderDashboard);
     document.getElementById('username').addEventListener('input', checkUsernameInput);
 
-    // 3. Download the baseline values live from the cloud tables data buckets
-    await downloadCloudState();
+    // 3. Assign input values from active state configuration vectors
+    document.getElementById('masterBagPriceInput').value = state.bagUnitPrice;
+    document.getElementById('adminPassInput').value = state.adminPassword;
+    document.getElementById('workerPassInput').value = state.workerPassword;
 
-    // 4. Auto-login active session memory state re-sync check
+    // 4. Auto-login active continuous session retention routine
     const rememberedRole = localStorage.getItem('remembered_role');
     const rememberedName = localStorage.getItem('remembered_name');
     if (rememberedRole) {
         setupUserSession(rememberedRole, rememberedName || "");
     }
-
-    // 5. Connect live subscription listeners pipeline channels
-    initializeRealtimeSync();
     
     renderDashboard();
 });
 
-// --- CLOUD SYNCHRONIZATION DATA FETCH PIPELINES ---
-async function downloadCloudState() {
-    try {
-        // Fetch Settings Configuration parameters Row
-        const { data: settingsData } = await supabase.from('portal_settings').select('*').eq('id', 1).single();
-        if (settingsData) {
-            state.bagUnitPrice = settingsData.bag_price;
-            state.adminPassword = settingsData.admin_password;
-            state.workerPassword = settingsData.worker_password;
-            
-            document.getElementById('masterBagPriceInput').value = state.bagUnitPrice;
-            document.getElementById('adminPassInput').value = state.adminPassword;
-            document.getElementById('workerPassInput').value = state.workerPassword;
-        }
-
-        // Fetch Inventory metrics values row
-        const { data: invData } = await supabase.from('inventory').select('*').eq('id', 1).single();
-        if (invData) {
-            state.inventory.production = invData.production;
-            state.inventory.damaged = invData.damaged;
-        }
-
-        // Fetch All Sales records from the table matrix
-        const { data: salesList } = await supabase.from('sales').select('*').order('id', { ascending: false });
-        if (salesList) {
-            state.sales = salesList.map(s => ({
-                invoiceNumber: s.invoice_number,
-                date: s.date,
-                customerName: s.customer_name,
-                quantity: s.quantity,
-                unitPrice: s.unit_price,
-                totalAmount: s.total_amount,
-                paymentMethod: s.payment_method,
-                officer: s.officer,
-                recordedBy: s.recorded_by
-            }));
-        }
-
-        // Fetch All Operating Expense Logs from table matrix
-        const { data: expensesList } = await supabase.from('expenses').select('*').order('id', { ascending: false });
-        if (expensesList) {
-            state.expenses = expensesList.map(e => ({
-                category: e.category,
-                amount: e.amount,
-                desc: e.desc,
-                date: e.date,
-                recordedBy: e.recorded_by
-            }));
-        }
-
-        // Fetch Activity Logging Audits from table matrix
-        const { data: logsList } = await supabase.from('access_logs').select('*').order('id', { ascending: false }).limit(25);
-        if (logsList) {
-            state.activeLogins = logsList;
-        }
-
-    } catch (err) {
-        console.error("Cloud framework sync error on initial boot up downloads: ", err);
-    }
-}
-
-// --- CORE INTERFACE REALTIME SUBSCRIPTIONS PIPELINE (THE SYNC MAGIC) ---
-function initializeRealtimeSync() {
-    supabase.channel('cloud-crud-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'portal_settings' }, async () => { await downloadCloudState(); renderDashboard(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, async () => { await downloadCloudState(); renderDashboard(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, async () => { await downloadCloudState(); renderDashboard(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, async () => { await downloadCloudState(); renderDashboard(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'access_logs' }, async () => { await downloadCloudState(); renderDashboard(); })
-        .subscribe();
-}
-
-// Reveal secondary input name label properties on username character evaluation keys
+// Reveal secondary identification element if user selects worker credentials type
 function checkUsernameInput(e) {
     const inputVal = e.target.value.toLowerCase().trim();
     const nameField = document.getElementById('workerNameField');
@@ -136,8 +57,8 @@ function checkUsernameInput(e) {
     }
 }
 
-// --- LOG IN ROUTINES INTEGRATED WITH CLOUD VAL SYSTEM STATE ---
-async function logInUser(e) {
+// --- SECURE AUTHORIZATION VERIFICATION SYSTEM RENDER ---
+function logInUser(e) {
     e.preventDefault();
     const userTyped = document.getElementById('username').value.toLowerCase().trim();
     const passTyped = document.getElementById('password').value.trim();
@@ -147,9 +68,6 @@ async function logInUser(e) {
         alert("Wrong Username. Type 'admin' or 'worker'.");
         return;
     }
-
-    // Double check cloud state matches values on user intent challenge verification
-    await downloadCloudState();
 
     if (userTyped === 'admin' && passTyped !== state.adminPassword) {
         alert("Invalid Admin Authentication Pin Key.");
@@ -170,12 +88,12 @@ async function logInUser(e) {
     const currentTimeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const sessionLabel = userTyped === 'admin' ? 'Admin Master' : `Worker: ${nameTyped}`;
     
-    // Save login event directly up to cloud activity framework matrix
-    await supabase.from('access_logs').insert([{
+    state.activeLogins.unshift({
         user: sessionLabel,
         time: currentTimeString,
         date: new Date().toLocaleDateString()
-    }]);
+    });
+    localStorage.setItem('yil_logins', JSON.stringify(state.activeLogins));
 
     localStorage.setItem('remembered_role', userTyped);
     localStorage.setItem('remembered_name', nameTyped);
@@ -211,8 +129,8 @@ function setupUserSession(role, name) {
     renderDashboard();
 }
 
-// --- LIVE ADMIN MASTER PRICE EDITING ACTION ---
-async function updateSystemPrice() {
+// --- ADMIN LIVE MASTER PRICE EDITING ACTION ---
+function updateSystemPrice() {
     if (state.currentRole !== 'admin') return;
     const newPrice = parseFloat(document.getElementById('masterBagPriceInput').value);
     if (!newPrice || newPrice <= 0) {
@@ -220,12 +138,14 @@ async function updateSystemPrice() {
         return;
     }
     
-    await supabase.from('portal_settings').update({ bag_price: newPrice }).eq('id', 1);
+    state.bagUnitPrice = newPrice;
+    localStorage.setItem('yil_bag_price', newPrice);
     alert(`Success! Standard bag price configuration updated to ₦${newPrice.toLocaleString()}`);
+    renderDashboard();
 }
 
 // --- DYNAMIC PASSWORD MODIFIER ACTIONS ---
-async function updateSystemPasswords() {
+function updateSystemPasswords() {
     if (state.currentRole !== 'admin') return;
     const newAdminPass = document.getElementById('adminPassInput').value.trim();
     const newWorkerPass = document.getElementById('workerPassInput').value.trim();
@@ -235,12 +155,13 @@ async function updateSystemPasswords() {
         return;
     }
 
-    await supabase.from('portal_settings').update({ 
-        admin_password: newAdminPass, 
-        worker_password: newWorkerPass 
-    }).eq('id', 1);
+    state.adminPassword = newAdminPass;
+    state.workerPassword = newWorkerPass;
     
-    alert("System Security Access Matrix successfully updated across all cloud instances!");
+    localStorage.setItem('yil_admin_pass', newAdminPass);
+    localStorage.setItem('yil_worker_pass', newWorkerPass);
+    
+    alert("System Security Access Matrix successfully updated across local storage instances!");
 }
 
 function logOut() {
@@ -258,79 +179,91 @@ function logOut() {
     document.getElementById('appInterface').classList.add('hidden');
 }
 
-async function clearAllData() {
+function clearAllData() {
     if (state.currentRole !== 'admin') return;
-    if (confirm("CRITICAL WARNING: Are you sure you want to completely erase all data row records across all cloud server tables? This action cannot be reversed!")) {
-        await supabase.from('sales').delete().neq('id', 0);
-        await supabase.from('expenses').delete().neq('id', 0);
-        await supabase.from('access_logs').delete().neq('id', 0);
-        await supabase.from('inventory').update({ production: 2000, damaged: 0 }).eq('id', 1);
-        await supabase.from('portal_settings').update({ bag_price: 350, admin_password: "3193", worker_password: "5566" }).eq('id', 1);
+    if (confirm("CRITICAL WARNING: Erase all logged local statements permanently from this machine profile browser sandbox memory?")) {
+        localStorage.clear();
+        state.sales = [];
+        state.expenses = [];
+        state.activeLogins = [];
+        state.inventory = { production: 2000, damaged: 0 };
+        state.bagUnitPrice = 350;
+        state.adminPassword = "3193";
+        state.workerPassword = "5566";
         
-        alert("Cloud storage servers successfully reset to factory parameters!");
-        await downloadCloudState();
+        document.getElementById('masterBagPriceInput').value = 350;
+        document.getElementById('adminPassInput').value = "3193";
+        document.getElementById('workerPassInput').value = "5566";
+        
+        alert("Local sandbox memory partitions cleared successfully!");
         renderDashboard();
     }
 }
 
-async function changeStock(field, val) {
-    let currentProd = state.inventory.production;
-    let currentDam = state.inventory.damaged;
+function changeStock(field, val) {
+    if (field === 'production') state.inventory.production = Math.max(0, state.inventory.production + val);
+    if (field === 'damaged') state.inventory.damaged = Math.max(0, state.inventory.damaged + val);
 
-    if (field === 'production') currentProd = Math.max(0, currentProd + val);
-    if (field === 'damaged') currentDam = Math.max(0, currentDam + val);
-
-    await supabase.from('inventory').update({ production: currentProd, damaged: currentDam }).eq('id', 1);
+    localStorage.setItem('yil_inventory', JSON.stringify(state.inventory));
+    renderDashboard();
 }
 
-// --- TRANSMIT TRANSACTION ENTRIES FORWARD TO CLOUD SERVERS ---
-async function saveNewSale(e) {
+// --- COMMIT LOG STATEMENTS OUT ---
+function saveNewSale(e) {
     e.preventDefault();
     const qty = parseInt(document.getElementById('invQty').value);
     const price = parseFloat(document.getElementById('invPrice').value); 
 
     const saleRecord = {
-        invoice_number: document.getElementById('invNo').value,
+        invoiceNumber: document.getElementById('invNo').value,
         date: document.getElementById('invDate').value,
-        customer_name: document.getElementById('invCustomer').value,
+        customerName: document.getElementById('invCustomer').value,
         quantity: qty,
-        unit_price: price,
-        total_amount: qty * price,
-        payment_method: document.getElementById('invPaymentMethod').value,
+        unitPrice: price,
+        totalAmount: qty * price,
+        paymentMethod: document.getElementById('invPaymentMethod').value,
         officer: document.getElementById('invOfficer').value,
-        recorded_by: state.currentUser 
+        recordedBy: state.currentUser 
     };
 
-    await supabase.from('sales').insert([saleRecord]);
-    closeModal('salesModal');
+    state.sales.unshift(saleRecord);
+    localStorage.setItem('yil_sales', JSON.stringify(state.sales));
 
+    closeModal('salesModal');
     document.getElementById('invCustomer').value = "";
     document.getElementById('invQty').value = "1";
+
+    renderDashboard();
 }
 
-async function saveNewExpense(e) {
+function saveNewExpense(e) {
     e.preventDefault();
     const expenseRecord = {
         category: document.getElementById('expCategory').value,
         amount: parseFloat(document.getElementById('expAmount').value),
         desc: document.getElementById('expDesc').value,
         date: new Date().toISOString().split('T')[0],
-        recorded_by: state.currentUser 
+        recordedBy: state.currentUser 
     };
 
-    await supabase.from('expenses').insert([expenseRecord]);
+    state.expenses.unshift(expenseRecord);
+    localStorage.setItem('yil_expenses', JSON.stringify(state.expenses));
+
     closeModal('expenseModal');
     e.target.reset();
+    renderDashboard();
 }
 
-async function deleteSale(invoiceNo) {
+function deleteSale(invoiceNo) {
     if (state.currentRole !== 'admin') return;
-    if (confirm("Do you want to permanently delete cloud ledger invoice row statement: " + invoiceNo + "?")) {
-        await supabase.from('sales').delete().eq('invoice_number', invoiceNo);
+    if (confirm("Permanently erase local tracking node index details for row record token statement: " + invoiceNo + "?")) {
+        state.sales = state.sales.filter(s => s.invoiceNumber !== invoiceNo);
+        localStorage.setItem('yil_sales', JSON.stringify(state.sales));
+        renderDashboard();
     }
 }
 
-// --- MATHEMATICAL LEDGER RENDERING ENGINE ---
+// --- RECOMPUTE MATH LEDGER ARRAYS CORE ENGINE ---
 function renderDashboard() {
     const selectedDate = document.getElementById('dateFilter').value;
     const filteredSales = state.sales.filter(s => s.date === selectedDate);
@@ -395,9 +328,9 @@ function renderDashboard() {
     if (state.currentRole === 'admin') {
         const logDisplayTarget = document.getElementById('loginLogsContainer');
         if (state.activeLogins.length === 0) {
-            logDisplayTarget.innerHTML = `<span class="text-slate-400 italic flex items-center gap-1"><i class="fa-solid fa-folder-open"></i> No access logs recorded in cloud.</span>`;
+            logDisplayTarget.innerHTML = `<span class="text-slate-400 italic flex items-center gap-1"><i class="fa-solid fa-folder-open"></i> No access logs recorded in local memory sandbox.</span>`;
         } else {
-            logDisplayTarget.innerHTML = state.activeLogins.map(log => `
+            logDisplayTarget.innerHTML = state.activeLogins.slice(0, 25).map(log => `
                 <div class="bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-xl inline-flex items-center justify-between font-semibold shadow-xs w-full">
                     <span class="flex items-center gap-1"><i class="fa-solid fa-user-clock text-blue-500 text-[10px]"></i> ${log.user}</span> 
                     <b class="text-slate-400 font-normal text-[10px] ml-1">(${log.date} at ${log.time})</b>
@@ -412,7 +345,7 @@ function renderDashboard() {
 function renderTableRows(salesArray) {
     const tbody = document.getElementById('salesTableBody');
     if (salesArray.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 italic font-medium"><i class="fa-solid fa-inbox block text-xl mb-1 text-slate-300"></i> No transactions logged on cloud for this selected calendar date view.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 italic font-medium"><i class="fa-solid fa-inbox block text-xl mb-1 text-slate-300"></i> No transactions logged on memory ledger profiles for this selected calendar date view.</td></tr>`;
         return;
     }
 
@@ -442,7 +375,7 @@ function renderTableRows(salesArray) {
     `).join('');
 }
 
-// --- EXPORT SHEET ARRAYS OUT ---
+// --- EXPORT MATRIX TO CSV SHEET ROUTINES ---
 function exportCSV() {
     const activeDate = document.getElementById('dateFilter').value || "Report";
     let rows = [];
@@ -480,7 +413,7 @@ function exportCSV() {
     document.body.removeChild(downloadAnchor);
 }
 
-// --- OPEN WINDOW SCREEN FRAME WORK MODALS ---
+// --- UTILITY MODAL DISPLAY LAYERS ---
 function openModal(id) {
     if (id === 'salesModal') {
         document.getElementById('invNo').value = 'YIL-' + Math.floor(100000 + Math.random() * 900000);
